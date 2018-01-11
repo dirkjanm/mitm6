@@ -1,7 +1,7 @@
 from __future__ import unicode_literals
 from scapy.all import sniff, ls, ARP, IPv6, DNS, DNSRR, Ether, conf
 from twisted.internet import reactor
-from twisted.internet.protocol import ProcessProtocol
+from twisted.internet.protocol import ProcessProtocol, DatagramProtocol
 from scapy.layers.dhcp6 import *
 from scapy.layers.inet6 import ICMPv6ND_RA
 from scapy.sendrecv import sendp
@@ -215,7 +215,11 @@ def setupFakeDns():
     # We bind to port 53 to prevent ICMP port unreachable packets being sent
     # actual responses are sent by scapy
     sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
-    sock.bind(('::', 53))
+    fulladdr = config.v6addr+ '%' + config.default_if
+    addrinfo = socket.getaddrinfo(fulladdr, 53, socket.AF_INET6, socket.SOCK_DGRAM)
+    sock.bind(addrinfo[0][4])
+    sock.setblocking(0)
+    return sock
 
 def send_ra():
     # Send a Router Advertisement with the "managed" and "other" flag set, which should cause clients to use DHCPv6 and ask us for addresses
@@ -272,7 +276,8 @@ def main():
         d.addErrback(print_err)
 
     # Set up DNS
-    setupFakeDns()
+    dnssock = setupFakeDns()
+    reactor.adoptDatagramPort(dnssock.fileno(), socket.AF_INET6, DatagramProtocol())
 
     reactor.addSystemEventTrigger('before', 'shutdown', shutdownnotice)
     reactor.run()
