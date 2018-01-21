@@ -1,5 +1,5 @@
 from __future__ import unicode_literals
-from scapy.all import sniff, ls, ARP, IPv6, DNS, DNSRR, Ether, conf
+from scapy.all import sniff, ls, ARP, IPv6, DNS, DNSRR, Ether, conf, IP, UDP
 from twisted.internet import reactor
 from twisted.internet.protocol import ProcessProtocol, DatagramProtocol
 from scapy.layers.dhcp6 import *
