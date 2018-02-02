@@ -19,7 +19,7 @@ After installation, mitm6 will be available as a command line program called `mi
 
 ```
 usage: mitm6.py [-h] [-i INTERFACE] [-l LOCALDOMAIN] [-4 ADDRESS] [-6 ADDRESS]
-                [-m ADDRESS] [-a] [-I] [-v] [--debug] [-d DOMAIN] [-b DOMAIN]
+                [-m ADDRESS] [-a] [-v] [--debug] [-d DOMAIN] [-b DOMAIN]
                 [-hw DOMAIN] [-hb DOMAIN] [--ignore-nofqnd]
 
 mitm6 - pwning IPv4 via IPv6
@@ -43,8 +43,6 @@ optional arguments:
                         mac of selected interface)
   -a, --no-ra           Do not advertise ourselves (useful for networks which
                         detect rogue Router Advertisements)
-  -I, --invertdns       Invert DNS whitelist principle, do intercept ONLY
-                        domains specified by -d/--domain
   -v, --verbose         Show verbose information
   --debug               Show debug information
 
