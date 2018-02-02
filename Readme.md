@@ -18,20 +18,20 @@ You can install the latest release from PyPI with `pip install mitm6`, or the la
 After installation, mitm6 will be available as a command line program called `mitm6`. Since it uses raw packet capture with Scapy, it should be run as root. mitm6 should detect your network settings by default and use your primary interface for its spoofing. The only option you will probably need to specify is the AD `domain` that you are spoofing. For advanced tuning, the following options are available:
 
 ```
-usage: mitm6 [-h] [-d DOMAIN] [-i INTERFACE] [-4 ADDRESS] [-6 ADDRESS]
-             [-m ADDRESS] [-a] [-v] [--debug]
+usage: mitm6.py [-h] [-i INTERFACE] [-l LOCALDOMAIN] [-4 ADDRESS] [-6 ADDRESS]
+                [-m ADDRESS] [-a] [-I] [-v] [--debug] [-d DOMAIN] [-b DOMAIN]
+                [-hw DOMAIN] [-hb DOMAIN] [--ignore-nofqnd]
 
 mitm6 - pwning IPv4 via IPv6
+For help or reporting issues, visit https://github.com/fox-it/mitm6
 
 optional arguments:
   -h, --help            show this help message and exit
-  -d DOMAIN, --domain DOMAIN
-                        Domain name to filter DNS queries on (Whitelist
-                        principle, multiple can be specified.)
-  -l LOCALDOMAIN, --localdomain LOCALDOMAIN
-                        Domain name to use as DNS search domain
   -i INTERFACE, --interface INTERFACE
                         Interface to use (default: autodetect)
+  -l LOCALDOMAIN, --localdomain LOCALDOMAIN
+                        Domain name to use as DNS search domain (default: use
+                        first DNS domain)
   -4 ADDRESS, --ipv4 ADDRESS
                         IPv4 address to send packets from (default:
                         autodetect)
@@ -48,9 +48,31 @@ optional arguments:
   -v, --verbose         Show verbose information
   --debug               Show debug information
 
+Filtering options:
+  -d DOMAIN, --domain DOMAIN
+                        Domain name to filter DNS queries on (Whitelist
+                        principle, multiple can be specified.)
+  -b DOMAIN, --blacklist DOMAIN
+                        Domain name to filter DNS queries on (Blacklist
+                        principle, multiple can be specified.)
+  -hw DOMAIN, --host-whitelist DOMAIN
+                        Hostname (FQDN) to filter DHCPv6 queries on (Whitelist
+                        principle, multiple can be specified.)
+  -hb DOMAIN, --host-blacklist DOMAIN
+                        Hostname (FQDN) to filter DHCPv6 queries on (Blacklist
+                        principle, multiple can be specified.)
+  --ignore-nofqnd       Ignore DHCPv6 queries that do not contain the Fully
+                        Qualified Domain Name (FQDN) option.
 ```
 
 You can manually override most of the autodetect options (though overriding the MAC address will break things). If the network has some hardware which blocks or detects rogue Router Advertisement messages, you can add the `--no-ra` flag to not broadcast those. Router Advertisements are not needed for mitm6 to work since it relies mainly on DHCPv6 messages.
+
+### Filtering options
+Several filtering options are available to select which hosts you want to attack and spoof. First there are the `--host-whitelist` and `--host-blacklist` options (or `-hw` and `-hb` for short), which take a (partial) domain as argument. Incoming DHCPv6 requests will be filtered against this list. The property checked is the DHCPv6 FQND option, in which the client provides its hostname. 
+The same applies for DNS requests, for this the `--domain` option (or `-d`) is available, where you can supply which domain(s) you want to spoof. Blacklisting is also possible with `--blacklist`/`-b`.
+
+For both the host and DNS filtering, simple string matching is performed. So if you choose to reply to `wpad`, it will also reply to queries for `wpad.corpdomain.com`. If you want more specific filtering, use both the whitelist and blacklist options, since the blacklist takes precedence over the whitelist.
+By default the first domain specified will be used as the DNS search domain, if you explicitliy want to specify this domain yourself use the `--localdomain` option.
 
 ## About network impact and restoring the network
 mitm6 is designed as a penetration testing tool and should thus impact the network as little as possible. This is the main reason mitm6 doesn't implement a full man-in-the-middle attack currently, like we see in for example the SLAAC attack.

@@ -81,14 +81,14 @@ class Config(object):
 
         self.debug = args.debug
         self.verbose = args.verbose
-        self.invertdns = args.invertdns
         # End of config
 
 # Target class - defines the host we are targetting
 class Target(object):
     def __init__(self, mac, host, ipv4=None):
         self.mac = mac
-        self.host = str(host)
+        # Make sure the host is in unicode
+        self.host = host.decode("utf-8")
         if ipv4 is not None:
             self.ipv4 = ipv4
         else:
@@ -306,7 +306,6 @@ def main():
     parser.add_argument("-6", "--ipv6", type=str, metavar='ADDRESS', help="IPv6 link-local address to send packets from (default: autodetect)")
     parser.add_argument("-m", "--mac", type=str, metavar='ADDRESS', help="Custom mac address - probably breaks stuff (default: mac of selected interface)")
     parser.add_argument("-a", "--no-ra", action='store_true', help="Do not advertise ourselves (useful for networks which detect rogue Router Advertisements)")
-    parser.add_argument("-I", "--invertdns", action='store_true', help="Invert DNS whitelist principle, do intercept ONLY domains specified by -d/--domain")
     parser.add_argument("-v", "--verbose", action='store_true', help="Show verbose information")
     parser.add_argument("--debug", action='store_true', help="Show debug information")
 
