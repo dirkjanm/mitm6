@@ -2,9 +2,9 @@ from setuptools import setup
 import sys
 # Python 2 vs 3 requirements
 if sys.version_info[0] == 2:
-    reqs = ["scapy", "ipaddress", "future", "twisted", "netifaces"]
+    reqs = ["scapy>=2.4", "ipaddress", "future", "twisted", "netifaces"]
 else:
-    reqs = ["scapy-python3", "twisted", "netifaces"]
+    reqs = ["scapy>=2.4", "twisted", "netifaces"]
 
 setup(name='mitm6',
       version='0.2.0',
