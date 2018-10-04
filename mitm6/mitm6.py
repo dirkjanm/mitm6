@@ -143,9 +143,14 @@ def send_dhcp_reply(p, basep):
     resp /= DHCP6OptDNSServers(dnsservers=[config.selfaddr])
     if config.localdomain:
         resp /= DHCP6OptDNSDomains(dnsdomains=[config.localdomain])
-    opt = p[DHCP6OptIAAddress]
-    resp /= DHCP6OptIA_NA(ianaopts=[opt], T1=200, T2=250, iaid=p[DHCP6OptIA_NA].iaid)
-    sendp(resp, verbose=False)
+    try:
+        opt = p[DHCP6OptIAAddress]
+        resp /= DHCP6OptIA_NA(ianaopts=[opt], T1=200, T2=250, iaid=p[DHCP6OptIA_NA].iaid)
+        sendp(resp, verbose=False)
+    except IndexError:
+        # Some hosts don't send back this layer for some reason, ignore those
+        if config.debug or config.verbose:
+            print('Ignoring DHCPv6 packet from %s: Missing DHCP6OptIAAddress layer' % basep.src)
 
 def send_dns_reply(p):
     if IPv6 in p:
