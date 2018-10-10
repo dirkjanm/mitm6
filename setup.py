@@ -7,7 +7,7 @@ else:
     reqs = ["scapy>=2.4", "twisted", "netifaces"]
 
 setup(name='mitm6',
-      version='0.2.0',
+      version='0.2.1',
       description='Pwning IPv4 via IPv6',
       license='GPLv2',
       classifiers=[
