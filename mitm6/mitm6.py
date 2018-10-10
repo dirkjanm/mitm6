@@ -39,7 +39,11 @@ class Config(object):
         else:
             self.v4addr = args.ipv4
         if args.ipv6 is None:
-            self.v6addr = netifaces.ifaddresses(self.default_if)[netifaces.AF_INET6][0]['addr']
+            try:
+                self.v6addr = netifaces.ifaddresses(self.default_if)[netifaces.AF_INET6][0]['addr']
+            except KeyError:
+                print('Error: The interface {0} does not have an IPv6 address assigned. Make sure IPv6 is activated on this interface.'.format(self.default_if))
+                sys.exit(1)
         else:
             self.v6addr = args.ipv6
         if args.mac is None:
