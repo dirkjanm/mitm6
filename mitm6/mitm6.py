@@ -72,7 +72,7 @@ class Config(object):
         self.host_whitelist = [d.lower() for d in args.host_whitelist]
         self.host_blacklist = [d.lower() for d in args.host_blacklist]
         # Should DHCPv6 queries that do not specify a FQDN be ignored?
-        self.ignore_nofqnd = args.ignore_nofqnd
+        self.ignore_nofqdn = args.ignore_nofqdn
         # Local domain to advertise
         # If no localdomain is specified, use the first dnsdomain
         if args.localdomain is None:
@@ -224,7 +224,7 @@ def should_spoof_dns(dnsname):
 def should_spoof_dhcpv6(fqdn):
     # If there is no FQDN specified, check if we should reply to empty ones
     if not fqdn:
-        return not config.ignore_nofqnd
+        return not config.ignore_nofqdn
     # If whitelist exists, host should match
     if config.host_whitelist and not matches_list(fqdn, config.host_whitelist):
         if config.debug:
@@ -323,7 +323,7 @@ def main():
     filtergroup.add_argument("-b", "--blacklist", action='append', default=[], metavar='DOMAIN', help="Domain name to filter DNS queries on (Blacklist principle, multiple can be specified.)")
     filtergroup.add_argument("-hw", "--host-whitelist", action='append', default=[], metavar='DOMAIN', help="Hostname (FQDN) to filter DHCPv6 queries on (Whitelist principle, multiple can be specified.)")
     filtergroup.add_argument("-hb", "--host-blacklist", action='append', default=[], metavar='DOMAIN', help="Hostname (FQDN) to filter DHCPv6 queries on (Blacklist principle, multiple can be specified.)")
-    filtergroup.add_argument("--ignore-nofqnd", action='store_true', help="Ignore DHCPv6 queries that do not contain the Fully Qualified Domain Name (FQDN) option.")
+    filtergroup.add_argument("--ignore-nofqdn", action='store_true', help="Ignore DHCPv6 queries that do not contain the Fully Qualified Domain Name (FQDN) option.")
 
     args = parser.parse_args()
     config = Config(args)

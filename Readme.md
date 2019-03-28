@@ -20,7 +20,7 @@ After installation, mitm6 will be available as a command line program called `mi
 ```
 usage: mitm6.py [-h] [-i INTERFACE] [-l LOCALDOMAIN] [-4 ADDRESS] [-6 ADDRESS]
                 [-m ADDRESS] [-a] [-v] [--debug] [-d DOMAIN] [-b DOMAIN]
-                [-hw DOMAIN] [-hb DOMAIN] [--ignore-nofqnd]
+                [-hw DOMAIN] [-hb DOMAIN] [--ignore-nofqdn]
 
 mitm6 - pwning IPv4 via IPv6
 For help or reporting issues, visit https://github.com/fox-it/mitm6
@@ -59,7 +59,7 @@ Filtering options:
   -hb DOMAIN, --host-blacklist DOMAIN
                         Hostname (FQDN) to filter DHCPv6 queries on (Blacklist
                         principle, multiple can be specified.)
-  --ignore-nofqnd       Ignore DHCPv6 queries that do not contain the Fully
+  --ignore-nofqdn       Ignore DHCPv6 queries that do not contain the Fully
                         Qualified Domain Name (FQDN) option.
 ```
 
