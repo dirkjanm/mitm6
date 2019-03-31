@@ -15,6 +15,7 @@ import netifaces
 import sys
 import argparse
 import socket
+import builtins
 
 # Globals
 pcdict = {}
@@ -98,7 +99,11 @@ class Target(object):
     def __init__(self, mac, host, ipv4=None):
         self.mac = mac
         # Make sure the host is in unicode
-        self.host = host.decode("utf-8")
+        try:
+            self.host = host.decode("utf-8")
+        except builtins.AttributeError:
+            # Already in unicode
+            self.host = host
         if ipv4 is not None:
             self.ipv4 = ipv4
         else:
