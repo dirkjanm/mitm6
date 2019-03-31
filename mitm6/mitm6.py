@@ -40,9 +40,15 @@ class Config(object):
             self.v4addr = args.ipv4
         if args.ipv6 is None:
             try:
-                self.v6addr = netifaces.ifaddresses(self.default_if)[netifaces.AF_INET6][0]['addr']
+                self.v6addr = None
+                addrs = netifaces.ifaddresses(self.default_if)[netifaces.AF_INET6]
+                for addr in addrs:
+                    if 'fe80::' in addr['addr']:
+                        self.v6addr = addr['addr']
             except KeyError:
-                print('Error: The interface {0} does not have an IPv6 address assigned. Make sure IPv6 is activated on this interface.'.format(self.default_if))
+                self.v6addr = None
+            if not self.v6addr:
+                print('Error: The interface {0} does not have an IPv6 link-local address assigned. Make sure IPv6 is activated on this interface.'.format(self.default_if))
                 sys.exit(1)
         else:
             self.v6addr = args.ipv6
