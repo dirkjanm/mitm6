@@ -354,16 +354,16 @@ def main():
 
     filtergroup = parser.add_argument_group("Filtering options")
     filtergroup.add_argument("-d", "--domain", action='append', default=[], metavar='DOMAIN', help="Domain name to filter DNS queries on (Whitelist principle, multiple can be specified.)")
-    filtergroup.add_argument("-df", "--domain-file", type=str, default="",
+    filtergroup.add_argument("-df", "--domain-file", type=str, default="", metavar='DOMAIN_FILENAME',
                              help="Path to file with domain names to filter DNS queries on (Whitelist principle)")
     filtergroup.add_argument("-b", "--blacklist", action='append', default=[], metavar='DOMAIN', help="Domain name to filter DNS queries on (Blacklist principle, multiple can be specified.)")
-    filtergroup.add_argument("-bf", "--blacklist-file", type=str, default="",
+    filtergroup.add_argument("-bf", "--blacklist-file", type=str, default="", metavar='DOMAIN_BLACKLIST_FILENAME',
                              help="Path to file with domain names to filter DNS queries on (Blacklist principle)")
     filtergroup.add_argument("-hw", "--host-whitelist", action='append', default=[], metavar='DOMAIN', help="Hostname (FQDN) to filter DHCPv6 queries on (Whitelist principle, multiple can be specified.)")
-    filtergroup.add_argument("-hwf", "--host-whitelist-file", type=str, default="",
+    filtergroup.add_argument("-hwf", "--host-whitelist-file", type=str, default="", metavar='HOST_WHITELIST_FILENAME',
                              help="Path to file with hostnames (FQDN) to filter DHCPv6 queries on (Whitelist principle)")
     filtergroup.add_argument("-hb", "--host-blacklist", action='append', default=[], metavar='DOMAIN', help="Hostname (FQDN) to filter DHCPv6 queries on (Blacklist principle, multiple can be specified.)")
-    filtergroup.add_argument("-hbf", "--host-blacklist-file", type=str, default="",
+    filtergroup.add_argument("-hbf", "--host-blacklist-file", type=str, default="", metavar='HOST_BLACKLIST_FILENAME',
                              help="Path to file with hostnames (FQDN) to filter DHCPv6 queries on (Blacklist principle)")
     filtergroup.add_argument("--ignore-nofqdn", action='store_true', help="Ignore DHCPv6 queries that do not contain the Fully Qualified Domain Name (FQDN) option.")
 
