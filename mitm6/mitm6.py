@@ -231,12 +231,12 @@ def matches_list(value, target_list):
 
 def add_file_conetn_to_list(filename, target_list):
     if not os.path.exists(filename):
-        print("File %s does not exists", filename)
+        print("File '%s' does not exists" %(filename))
         return target_list
     try:
         f = open(filename, "r")
     except Exception as e:
-        print("Cannot open file %s", filename)
+        print("Cannot open file '%s'" % (filename))
         print("Error: %s", e)
         return target_list
     for line in f:
