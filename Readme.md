@@ -18,9 +18,9 @@ You can install the latest release from PyPI with `pip install mitm6`, or the la
 After installation, mitm6 will be available as a command line program called `mitm6`. Since it uses raw packet capture with Scapy, it should be run as root. mitm6 should detect your network settings by default and use your primary interface for its spoofing. The only option you will probably need to specify is the AD `domain` that you are spoofing. For advanced tuning, the following options are available:
 
 ```
-usage: mitm6.py [-h] [-i INTERFACE] [-l LOCALDOMAIN] [-4 ADDRESS] [-6 ADDRESS]
-                [-m ADDRESS] [-a] [-v] [--debug] [-d DOMAIN] [-b DOMAIN]
-                [-hw DOMAIN] [-hb DOMAIN] [--ignore-nofqdn]
+usage: mitm6.py [-h] [-i INTERFACE] [-l LOCALDOMAIN] [-4 ADDRESS] [-6 ADDRESS] [-m ADDRESS] [-a] [-v] [--debug]
+                [-d DOMAIN] [-df DOMAIN_FILENAME] [-b DOMAIN] [-bf DOMAIN_BLACKLIST_FILENAME] [-hw DOMAIN]
+                [-hwf HOST_WHITELIST_FILENAME] [-hb DOMAIN] [-hbf HOST_BLACKLIST_FILENAME] [--ignore-nofqdn]
 
 mitm6 - pwning IPv4 via IPv6
 For help or reporting issues, visit https://github.com/fox-it/mitm6
@@ -47,27 +47,35 @@ optional arguments:
   --debug               Show debug information
 
 Filtering options:
+  
   -d DOMAIN, --domain DOMAIN
-                        Domain name to filter DNS queries on (Whitelist
-                        principle, multiple can be specified.)
+                        Domain name to filter DNS queries on (Whitelist principle, multiple can be specified.)
+  -df DOMAIN_FILENAME, --domain-file DOMAIN_FILENAME
+                        Path to file with domain names to filter DNS queries on (Whitelist principle)
   -b DOMAIN, --blacklist DOMAIN
-                        Domain name to filter DNS queries on (Blacklist
-                        principle, multiple can be specified.)
+                        Domain name to filter DNS queries on (Blacklist principle, multiple can be specified.)
+  -bf DOMAIN_BLACKLIST_FILENAME, --blacklist-file DOMAIN_BLACKLIST_FILENAME
+                        Path to file with domain names to filter DNS queries on (Blacklist principle)
   -hw DOMAIN, --host-whitelist DOMAIN
-                        Hostname (FQDN) to filter DHCPv6 queries on (Whitelist
-                        principle, multiple can be specified.)
+                        Hostname (FQDN) to filter DHCPv6 queries on (Whitelist principle, multiple can be
+                        specified.)
+  -hwf HOST_WHITELIST_FILENAME, --host-whitelist-file HOST_WHITELIST_FILENAME
+                        Path to file with hostnames (FQDN) to filter DHCPv6 queries on (Whitelist principle)
   -hb DOMAIN, --host-blacklist DOMAIN
-                        Hostname (FQDN) to filter DHCPv6 queries on (Blacklist
-                        principle, multiple can be specified.)
-  --ignore-nofqdn       Ignore DHCPv6 queries that do not contain the Fully
-                        Qualified Domain Name (FQDN) option.
+                        Hostname (FQDN) to filter DHCPv6 queries on (Blacklist principle, multiple can be
+                        specified.)
+  -hbf HOST_BLACKLIST_FILENAME, --host-blacklist-file HOST_BLACKLIST_FILENAME
+                        Path to file with hostnames (FQDN) to filter DHCPv6 queries on (Blacklist principle)
+  --ignore-nofqdn       Ignore DHCPv6 queries that do not contain the Fully Qualified Domain Name (FQDN) option.
 ```
 
 You can manually override most of the autodetect options (though overriding the MAC address will break things). If the network has some hardware which blocks or detects rogue Router Advertisement messages, you can add the `--no-ra` flag to not broadcast those. Router Advertisements are not needed for mitm6 to work since it relies mainly on DHCPv6 messages.
 
 ### Filtering options
-Several filtering options are available to select which hosts you want to attack and spoof. First there are the `--host-whitelist` and `--host-blacklist` options (or `-hw` and `-hb` for short), which take a (partial) domain as argument. Incoming DHCPv6 requests will be filtered against this list. The property checked is the DHCPv6 FQND option, in which the client provides its hostname. 
-The same applies for DNS requests, for this the `--domain` option (or `-d`) is available, where you can supply which domain(s) you want to spoof. Blacklisting is also possible with `--blacklist`/`-b`.
+Several filtering options are available to select which hosts you want to attack and spoof. First there are the `--host-whitelist` and `--host-blacklist` options (or `-hw` and `-hb` for short), which take a (partial) domain as argument. Incoming DHCPv6 requests will be filtered against this list. The property checked is the DHCPv6 FQND option, in which the client provides its hostname. In addition `--host-whitelist-file` and `--host-blacklist-file` options (or `-hwf` and `-hbf` for short) takes a filename as argument. File should consists of domain names, one per line.
+The same applies for DNS requests, for this the `--domain` option (or `-d`) is available, where you can supply which domain(s) you want to spoof. Blacklisting is also possible with `--blacklist`/`-b`. And there are `--domain-file` and `--blacklist-file` options (or `-df` and `-bf`), which allow get domains from file. 
+
+
 
 For both the host and DNS filtering, simple string matching is performed. So if you choose to reply to `wpad`, it will also reply to queries for `wpad.corpdomain.com`. If you want more specific filtering, use both the whitelist and blacklist options, since the blacklist takes precedence over the whitelist.
 By default the first domain specified will be used as the DNS search domain, if you explicitliy want to specify this domain yourself use the `--localdomain` option.
