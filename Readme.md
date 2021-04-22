@@ -67,7 +67,7 @@ You can manually override most of the autodetect options (though overriding the 
 
 ### Filtering options
 Several filtering options are available to select which hosts you want to attack and spoof. First there are the `--host-whitelist` and `--host-blacklist` options (or `-hw` and `-hb` for short), which take a (partial) domain as argument. Incoming DHCPv6 requests will be filtered against this list. The property checked is the DHCPv6 FQND option, in which the client provides its hostname. 
-The same applies for DNS requests, for this the `--domain` option (or `-d`) is available, where you can supply which domain(s) you want to spoof. Blacklisting is also possible with `--blacklist`/`-b`.
+The same applies for DNS requests, for this the `--domain` option (or `-d`) is available, where you can supply which domain(s) you want to spoof. Blocking specific domains is also possible with `--blacklist`/`-b`. Both parameters can be specified multiple times to include/block multiple domains (for example `-d domain.local -d otherdomain.local -b somehost.domain.local -b somehost.otherdomain.local`).
 
 For both the host and DNS filtering, simple string matching is performed. So if you choose to reply to `wpad`, it will also reply to queries for `wpad.corpdomain.com`. If you want more specific filtering, use both the whitelist and blacklist options, since the blacklist takes precedence over the whitelist.
 By default the first domain specified will be used as the DNS search domain, if you explicitliy want to specify this domain yourself use the `--localdomain` option.
