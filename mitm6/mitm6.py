@@ -280,7 +280,7 @@ def parsepacket(p):
             print('Renew reply sent to %s' % p[DHCP6OptIA_NA].ianaopts[0].addr)
     if ARP in p:
         arpp = p[ARP]
-        if arpp.op is 2:
+        if arpp.op == 2:
             #Arp is-at package, update internal arp table
             arptable[arpp.hwsrc] = arpp.psrc
     if DNS in p:
