@@ -1,5 +1,5 @@
 from __future__ import unicode_literals
-from scapy.all import sniff, ls, ARP, IPv6, DNS, DNSRR, Ether, conf, IP, UDP
+from scapy.all import sniff, ls, ARP, IPv6, DNS, DNSRR, Ether, conf, IP, UDP, DNSRRSOA
 from twisted.internet import reactor
 from twisted.internet.protocol import ProcessProtocol, DatagramProtocol
 from scapy.layers.dhcp6 import *
@@ -72,12 +72,12 @@ class Config(object):
         self.selfptr = ipaddress.ip_address(str(self.selfaddr)).reverse_pointer + '.'
         self.ipv6noaddr = random.randint(1,9999)
         self.ipv6noaddrc = 1
-        # DNS whitelist / blacklist options
-        self.dns_whitelist = [d.lower() for d in args.domain]
-        self.dns_blacklist = [d.lower() for d in args.blacklist]
-        # Hostname (DHCPv6 FQDN) whitelist / blacklist options
-        self.host_whitelist = [d.lower() for d in args.host_whitelist]
-        self.host_blacklist = [d.lower() for d in args.host_blacklist]
+        # DNS allowlist / blocklist options
+        self.dns_allowlist = [d.lower() for d in args.domain]
+        self.dns_blocklist = [d.lower() for d in args.blocklist]
+        # Hostname (DHCPv6 FQDN) allowlist / blocklist options
+        self.host_allowlist = [d.lower() for d in args.host_allowlist]
+        self.host_blocklist = [d.lower() for d in args.host_blocklist]
         # Should DHCPv6 queries that do not specify a FQDN be ignored?
         self.ignore_nofqdn = args.ignore_nofqdn
         # Local domain to advertise
@@ -223,11 +223,11 @@ def matches_list(value, target_list):
 
 # Should we spoof the queried name?
 def should_spoof_dns(dnsname):
-    # If whitelist exists, host should match
-    if config.dns_whitelist and not matches_list(dnsname, config.dns_whitelist):
+    # If allowlist exists, host should match
+    if config.dns_allowlist and not matches_list(dnsname, config.dns_allowlist):
         return False
-    # If there are any entries in the blacklist, make sure it doesnt match against any
-    if matches_list(dnsname, config.dns_blacklist):
+    # If there are any entries in the blocklist, make sure it doesnt match against any
+    if matches_list(dnsname, config.dns_blocklist):
         return False
     return True
 
@@ -236,15 +236,15 @@ def should_spoof_dhcpv6(fqdn):
     # If there is no FQDN specified, check if we should reply to empty ones
     if not fqdn:
         return not config.ignore_nofqdn
-    # If whitelist exists, host should match
-    if config.host_whitelist and not matches_list(fqdn, config.host_whitelist):
+    # If allowlist exists, host should match
+    if config.host_allowlist and not matches_list(fqdn, config.host_allowlist):
         if config.debug:
-            print('Ignoring DHCPv6 packet from %s: FQDN not in whitelist ' % fqdn)
+            print('Ignoring DHCPv6 packet from %s: FQDN not in allowlist ' % fqdn)
         return False
-    # If there are any entries in the blacklist, make sure it doesnt match against any
-    if matches_list(fqdn, config.host_blacklist):
+    # If there are any entries in the blocklist, make sure it doesnt match against any
+    if matches_list(fqdn, config.host_blocklist):
         if config.debug:
-            print('Ignoring DHCPv6 packet from %s: FQDN matches blacklist ' % fqdn)
+            print('Ignoring DHCPv6 packet from %s: FQDN matches blocklist ' % fqdn)
         return False
     return True
 
@@ -295,7 +295,13 @@ def setupFakeDns():
     addrinfo = socket.getaddrinfo(fulladdr, 53, socket.AF_INET6, socket.SOCK_DGRAM)
     sock.bind(addrinfo[0][4])
     sock.setblocking(0)
-    return sock
+    # Bind IPv4 as well
+    sock2 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    fulladdr = config.v4addr
+    addrinfo = socket.getaddrinfo(fulladdr, 53, socket.AF_INET, socket.SOCK_DGRAM)
+    sock2.bind(addrinfo[0][4])
+    sock2.setblocking(0)
+    return sock, sock2
 
 def send_ra():
     # Send a Router Advertisement with the "managed" and "other" flag set, which should cause clients to use DHCPv6 and ask us for addresses
@@ -319,7 +325,7 @@ def print_err(failure):
 
 def main():
     global config
-    parser = argparse.ArgumentParser(description='mitm6 - pwning IPv4 via IPv6\nFor help or reporting issues, visit https://github.com/fox-it/mitm6', formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(description='mitm6 - pwning IPv4 via IPv6\nFor help or reporting issues, visit https://github.com/dirkjanm/mitm6', formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("-i", "--interface", type=str, metavar='INTERFACE', help="Interface to use (default: autodetect)")
     parser.add_argument("-l", "--localdomain", type=str, metavar='LOCALDOMAIN', help="Domain name to use as DNS search domain (default: use first DNS domain)")
     parser.add_argument("-4", "--ipv4", type=str, metavar='ADDRESS', help="IPv4 address to send packets from (default: autodetect)")
@@ -330,10 +336,10 @@ def main():
     parser.add_argument("--debug", action='store_true', help="Show debug information")
 
     filtergroup = parser.add_argument_group("Filtering options")
-    filtergroup.add_argument("-d", "--domain", action='append', default=[], metavar='DOMAIN', help="Domain name to filter DNS queries on (Whitelist principle, multiple can be specified.)")
-    filtergroup.add_argument("-b", "--blacklist", action='append', default=[], metavar='DOMAIN', help="Domain name to filter DNS queries on (Blacklist principle, multiple can be specified.)")
-    filtergroup.add_argument("-hw", "--host-whitelist", action='append', default=[], metavar='DOMAIN', help="Hostname (FQDN) to filter DHCPv6 queries on (Whitelist principle, multiple can be specified.)")
-    filtergroup.add_argument("-hb", "--host-blacklist", action='append', default=[], metavar='DOMAIN', help="Hostname (FQDN) to filter DHCPv6 queries on (Blacklist principle, multiple can be specified.)")
+    filtergroup.add_argument("-d", "--domain", action='append', default=[], metavar='DOMAIN', help="Domain name to filter DNS queries on (Allowlist principle, multiple can be specified.)")
+    filtergroup.add_argument("-b", "--blocklist", action='append', default=[], metavar='DOMAIN', help="Domain name to filter DNS queries on (Blocklist principle, multiple can be specified.)")
+    filtergroup.add_argument("-hw", "-ha", "--host-allowlist", "--host-whitelist", action='append', default=[], metavar='DOMAIN', help="Hostname (FQDN) to filter DHCPv6 queries on (Allowlist principle, multiple can be specified.)")
+    filtergroup.add_argument("-hb", "--host-blocklist", "--host-blacklist", action='append', default=[], metavar='DOMAIN', help="Hostname (FQDN) to filter DHCPv6 queries on (Blocklist principle, multiple can be specified.)")
     filtergroup.add_argument("--ignore-nofqdn", action='store_true', help="Ignore DHCPv6 queries that do not contain the Fully Qualified Domain Name (FQDN) option.")
 
     args = parser.parse_args()
@@ -345,19 +351,19 @@ def main():
     print('IPv6 address: %s' % config.selfaddr)
     if config.localdomain is not None:
         print('DNS local search domain: %s' % config.localdomain)
-    if not config.dns_whitelist and not config.dns_blacklist:
+    if not config.dns_allowlist and not config.dns_blocklist:
         print('Warning: Not filtering on any domain, mitm6 will reply to all DNS queries.\nUnless this is what you want, specify at least one domain with -d')
     else:
-        if not config.dns_whitelist:
-            print('DNS whitelist: *')
+        if not config.dns_allowlist:
+            print('DNS allowlist: *')
         else:
-            print('DNS whitelist: %s' % ', '.join(config.dns_whitelist))
-        if config.dns_blacklist:
-            print('DNS blacklist: %s' % ', '.join(config.dns_blacklist))
-    if config.host_whitelist:
-        print('Hostname whitelist: %s' % ', '.join(config.host_whitelist))
-    if config.host_blacklist:
-        print('Hostname blacklist: %s' % ', '.join(config.host_blacklist))
+            print('DNS allowlist: %s' % ', '.join(config.dns_allowlist))
+        if config.dns_blocklist:
+            print('DNS blocklist: %s' % ', '.join(config.dns_blocklist))
+    if config.host_allowlist:
+        print('Hostname allowlist: %s' % ', '.join(config.host_allowlist))
+    if config.host_blocklist:
+        print('Hostname blocklist: %s' % ', '.join(config.host_blocklist))
 
     #Main packet capture thread
     d = threads.deferToThread(sniff, iface=config.default_if, filter="ip6 proto \\udp or arp or udp port 53", prn=lambda x: reactor.callFromThread(parsepacket, x), stop_filter=should_stop)
@@ -370,8 +376,9 @@ def main():
         d.addErrback(print_err)
 
     # Set up DNS
-    dnssock = setupFakeDns()
+    dnssock, dnssock2 = setupFakeDns()
     reactor.adoptDatagramPort(dnssock.fileno(), socket.AF_INET6, DatagramProtocol())
+    reactor.adoptDatagramPort(dnssock2.fileno(), socket.AF_INET, DatagramProtocol())
 
     reactor.addSystemEventTrigger('before', 'shutdown', shutdownnotice)
     reactor.run()
