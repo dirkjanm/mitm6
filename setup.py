@@ -7,7 +7,7 @@ else:
     reqs = ["scapy>=2.4", "twisted", "netifaces"]
 
 setup(name='mitm6',
-      version='0.2.2',
+      version='0.3.0',
       description='Pwning IPv4 via IPv6',
       license='GPLv2',
       classifiers=[
@@ -22,7 +22,7 @@ setup(name='mitm6',
       ],
       author='Dirk-jan Mollema / Fox-IT',
       author_email='dirkjan.mollema@fox-it.com',
-      url='https://github.com/fox-it/mitm6/',
+      url='https://github.com/dirkjanm/mitm6/',
       packages=['mitm6'],
       install_requires=reqs,
       entry_points= {
