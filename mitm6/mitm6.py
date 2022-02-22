@@ -326,7 +326,8 @@ def setupFakeDns():
 
 def send_ra():
     # Send a Router Advertisement with the "managed" and "other" flag set, which should cause clients to use DHCPv6 and ask us for addresses
-    p = Ether(dst='33:33:00:00:00:01')/IPv6(dst='ff02::1')/ICMPv6ND_RA(M=1, O=1)
+    # routerlifetime is set to 0 in order to not adverise ourself as a gateway (RFC4861, section 4.2)
+    p = Ether(src=config.selfmac, dst='33:33:00:00:00:01')/IPv6(src=config.selfaddr, dst='ff02::1')/ICMPv6ND_RA(M=1, O=1, routerlifetime=0)
     sendp(p, iface=config.default_if, verbose=False)
 
 # Whether packet capturing should stop
