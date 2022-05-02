@@ -26,6 +26,15 @@ try:
 except IOError:
     pass
 
+# Prints to stdout and log file (if enabled)
+def smart_print(message):
+    print(message)
+    if config.outfile:
+        fn = config.outfile
+        fo = open(config.outfile, 'a')
+        fo.write("%s\n" % message)
+        fo.close()
+
 # Config class - contains runtime config
 class Config(object):
     def __init__(self, args):
@@ -39,6 +48,8 @@ class Config(object):
             self.v4addr = netifaces.ifaddresses(self.default_if)[netifaces.AF_INET][0]['addr']
         else:
             self.v4addr = args.ipv4
+        if args.outfile:
+            self.outfile = args.outfile
         if args.ipv6 is None:
             try:
                 self.v6addr = None
@@ -49,7 +60,7 @@ class Config(object):
             except KeyError:
                 self.v6addr = None
             if not self.v6addr:
-                print('Error: The interface {0} does not have an IPv6 link-local address assigned. Make sure IPv6 is activated on this interface.'.format(self.default_if))
+                smart_print('Error: The interface {0} does not have an IPv6 link-local address assigned. Make sure IPv6 is activated on this interface.'.format(self.default_if))
                 sys.exit(1)
         else:
             self.v6addr = args.ipv6
@@ -170,7 +181,7 @@ def send_dhcp_reply(p, basep):
     except IndexError:
         # Some hosts don't send back this layer for some reason, ignore those
         if config.debug or config.verbose:
-            print('Ignoring DHCPv6 packet from %s: Missing DHCP6OptIAAddress layer' % basep.src)
+            smart_print('Ignoring DHCPv6 packet from %s: Missing DHCP6OptIAAddress layer' % basep.src)
 
 def send_dns_reply(p):
     if IPv6 in p:
@@ -205,7 +216,7 @@ def send_dns_reply(p):
     elif dns.qd.qtype == 6 and config.relay:
         if dns.opcode == 5:
             if config.verbose or config.debug:
-                print('Dynamic update found, refusing it to trigger auth')
+                smart_print('Dynamic update found, refusing it to trigger auth')
             resp /= DNS(id=dns.id, qr=1, qd=dns.qd, ns=dns.ns, opcode=5, rcode=5)
             sendp(resp, verbose=False)
         else:
@@ -215,7 +226,7 @@ def send_dns_reply(p):
                         ar=DNSRR(rrname=config.relay, type=1, rclass=1, ttl=300, rdata=config.selfipv4))
             sendp(resp, verbose=False)
             if config.verbose or config.debug:
-                print('Sent SOA reply')
+                smart_print('Sent SOA reply')
         return
     #Not handled
     else:
@@ -225,14 +236,14 @@ def send_dns_reply(p):
         try:
             sendp(resp, iface=config.default_if, verbose=False)
         except socket.error as e:
-            print('Error sending spoofed DNS')
-            print(e)
+            smart_print('Error sending spoofed DNS')
+            smart_print(e)
             if config.debug:
                 ls(resp)
-        print('Sent spoofed reply for %s to %s' % (reqname, ip.src))
+        smart_print('Sent spoofed reply for %s to %s' % (reqname, ip.src))
     else:
         if config.verbose or config.debug:
-            print('Ignored query for %s from %s' % (reqname, ip.src))
+            smart_print('Ignored query for %s from %s' % (reqname, ip.src))
 
 # Helper function to check whether any element in the list "matches" value
 def matches_list(value, target_list):
@@ -260,12 +271,12 @@ def should_spoof_dhcpv6(fqdn):
     # If allowlist exists, host should match
     if config.host_allowlist and not matches_list(fqdn, config.host_allowlist):
         if config.debug:
-            print('Ignoring DHCPv6 packet from %s: FQDN not in allowlist ' % fqdn)
+            smart_print('Ignoring DHCPv6 packet from %s: FQDN not in allowlist ' % fqdn)
         return False
     # If there are any entries in the blocklist, make sure it doesnt match against any
     if matches_list(fqdn, config.host_blocklist):
         if config.debug:
-            print('Ignoring DHCPv6 packet from %s: FQDN matches blocklist ' % fqdn)
+            smart_print('Ignoring DHCPv6 packet from %s: FQDN matches blocklist ' % fqdn)
         return False
     return True
 
@@ -293,12 +304,12 @@ def parsepacket(p):
         target = get_target(p)
         if p[DHCP6OptServerId].duid == config.selfduid and should_spoof_dhcpv6(target.host):
             send_dhcp_reply(p[DHCP6_Request], p)
-            print('IPv6 address %s is now assigned to %s' % (p[DHCP6OptIA_NA].ianaopts[0].addr, pcdict[p.src]))
+            smart_print('IPv6 address %s is now assigned to %s' % (p[DHCP6OptIA_NA].ianaopts[0].addr, pcdict[p.src]))
     if DHCP6_Renew in p:
         target = get_target(p)
         if p[DHCP6OptServerId].duid == config.selfduid and should_spoof_dhcpv6(target.host):
             send_dhcp_reply(p[DHCP6_Renew],p)
-            print('Renew reply sent to %s' % p[DHCP6OptIA_NA].ianaopts[0].addr)
+            smart_print('Renew reply sent to %s' % p[DHCP6OptIA_NA].ianaopts[0].addr)
     if ARP in p:
         arpp = p[ARP]
         if arpp.op == 2:
@@ -335,15 +346,15 @@ def should_stop(_):
     return not reactor.running
 
 def shutdownnotice():
-    print('')
-    print('Shutting down packet capture after next packet...')
-    # print(pcdict)
-    # print(arptable)
+    smart_print('')
+    smart_print('Shutting down packet capture after next packet...')
+    # smart_print(pcdict)
+    # smart_print(arptable)
     with open('arp.cache','w') as arpcache:
         arpcache.write(json.dumps(arptable))
 
 def print_err(failure):
-    print('An error occurred while sending a packet: %s\nNote that root privileges are required to run mitm6' % failure.getErrorMessage())
+    smart_print('An error occurred while sending a packet: %s\nNote that root privileges are required to run mitm6' % failure.getErrorMessage())
 
 def main():
     global config
@@ -356,6 +367,7 @@ def main():
     parser.add_argument("-a", "--no-ra", action='store_true', help="Do not advertise ourselves (useful for networks which detect rogue Router Advertisements)")
     parser.add_argument("-r", "--relay", type=str, metavar='TARGET', help="Authentication relay target, will be used as fake DNS server hostname to trigger Kerberos auth")
     parser.add_argument("-v", "--verbose", action='store_true', help="Show verbose information")
+    parser.add_argument("-o", "--outfile", type=str, metavar="OUTFILE", help="Store the output to a log file in realtime.")
     parser.add_argument("--debug", action='store_true', help="Show debug information")
 
     filtergroup = parser.add_argument_group("Filtering options")
@@ -368,27 +380,27 @@ def main():
     args = parser.parse_args()
     config = Config(args)
 
-    print('Starting mitm6 using the following configuration:')
-    print('Primary adapter: %s [%s]' % (config.default_if, config.selfmac))
-    print('IPv4 address: %s' % config.selfipv4)
-    print('IPv6 address: %s' % config.selfaddr)
+    smart_print('Starting mitm6 using the following configuration:')
+    smart_print('Primary adapter: %s [%s]' % (config.default_if, config.selfmac))
+    smart_print('IPv4 address: %s' % config.selfipv4)
+    smart_print('IPv6 address: %s' % config.selfaddr)
     if config.localdomain is not None:
-        print('DNS local search domain: %s' % config.localdomain)
+        smart_print('DNS local search domain: %s' % config.localdomain)
     if not config.dns_allowlist and not config.dns_blocklist:
-        print('Warning: Not filtering on any domain, mitm6 will reply to all DNS queries.\nUnless this is what you want, specify at least one domain with -d')
+        smart_print('Warning: Not filtering on any domain, mitm6 will reply to all DNS queries.\nUnless this is what you want, specify at least one domain with -d')
     else:
         if not config.dns_allowlist:
-            print('DNS allowlist: *')
+            smart_print('DNS allowlist: *')
         else:
-            print('DNS allowlist: %s' % ', '.join(config.dns_allowlist))
+            smart_print('DNS allowlist: %s' % ', '.join(config.dns_allowlist))
             if config.relay and len([matching for matching in config.dns_allowlist if matching in config.relay]) == 0:
-                print('Warning: Relay target is specified but the DNS query allowlist does not contain the target name.')
+                smart_print('Warning: Relay target is specified but the DNS query allowlist does not contain the target name.')
         if config.dns_blocklist:
-            print('DNS blocklist: %s' % ', '.join(config.dns_blocklist))
+            smart_print('DNS blocklist: %s' % ', '.join(config.dns_blocklist))
     if config.host_allowlist:
-        print('Hostname allowlist: %s' % ', '.join(config.host_allowlist))
+        smart_print('Hostname allowlist: %s' % ', '.join(config.host_allowlist))
     if config.host_blocklist:
-        print('Hostname blocklist: %s' % ', '.join(config.host_blocklist))
+        smart_print('Hostname blocklist: %s' % ', '.join(config.host_blocklist))
 
     #Main packet capture thread
     d = threads.deferToThread(sniff, iface=config.default_if, filter="ip6 proto \\udp or arp or udp port 53", prn=lambda x: reactor.callFromThread(parsepacket, x), stop_filter=should_stop)
