@@ -241,8 +241,6 @@ def send_dns_reply(p):
             if config.debug:
                 ls(resp)
         smart_print('Sent spoofed reply for %s to %s' % (reqname, ip.src))
-        if config.outfile:
-          smart_print("LOL adding this to the outfile!")
     else:
         if config.verbose or config.debug:
             smart_print('Ignored query for %s from %s' % (reqname, ip.src))
