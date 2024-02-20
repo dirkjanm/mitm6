@@ -181,28 +181,28 @@ def send_dns_reply(p):
         resp = Ether(dst=p.src, src=p.dst)/IP(dst=ip.src, src=ip.dst)/UDP(dport=ip.sport, sport=ip.dport)
     dns = p[DNS]
     try:
-    # only reply to IN, and to messages that dont contain answers
+        # only reply to IN, and to messages that dont contain answers
         if dns.qd.qclass != 1 or dns.qr != 0:
             return
-    # Make sure the requested name is in unicode here
+        # Make sure the requested name is in unicode here
         reqname = dns.qd.qname.decode()
-    # A query
+        # A query
         if dns.qd.qtype == 1:
             rdata = config.selfipv4
-    # AAAA query
+        # AAAA query
         elif dns.qd.qtype == 28:
             rdata = config.selfaddr
-    # PTR query
+        # PTR query
         elif dns.qd.qtype == 12:
-        # To reply for PTR requests for our own hostname
-        # comment the return statement
+            # To reply for PTR requests for our own hostname
+            # comment the return statement
             return
             if reqname == config.selfptr:
-            #We reply with attacker.domain
+                #We reply with attacker.domain
                 rdata = 'attacker.%s' % config.localdomain
             else:
                 return
-    # SOA query
+        # SOA query
         elif dns.qd.qtype == 6 and config.relay:
             if dns.opcode == 5:
                 if config.verbose or config.debug:
@@ -218,7 +218,7 @@ def send_dns_reply(p):
                 if config.verbose or config.debug:
                     print('Sent SOA reply')
             return
-    #Not handled
+        #Not handled
         else:
             return
         if should_spoof_dns(reqname):
